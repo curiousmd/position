@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Trading Order Sizing Multi-Ticker</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles to ensure Inter font and enhance Tailwind defaults */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            margin: 0;
+            padding: 30px 20px;
+            box-sizing: border-box;
+            min-height: 100vh;
+        }
+        .main-container {
+            width: 100%;
+            max-width: 1200px; /* Allow wider layout for multiple columns */
+            margin: 0 auto;
+        }
+        /* --- Multi-Column Layout Changes --- */
+        #app-container {
+            display: flex;
+            flex-wrap: wrap; /* Allows cards to wrap to the next row */
+            gap: 30px; /* Spacing between cards */
+            justify-content: center; /* Center cards within the main container */
+        }
+
+        .card {
+            background-color: #ffffff;
+            padding: 1.5rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e5e7eb;
+            /* Flex basis to allow two or three cards per row */
+            flex: 1 1 300px; 
+            max-width: 400px;
+            margin-bottom: 0; /* Margin is now handled by the gap property */
+        }
+        /* --- End Layout Changes --- */
+
+        label {
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.25rem;
+            display: block;
+            font-size: 0.9rem;
+        }
+        input[type="number"], input[type="text"] {
+            width: 100%;
+            padding: 0.6rem 0.8rem;
+            margin-bottom: 1rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            box-sizing: border-box;
+            font-size: 0.9rem;
+            color: #1f2937;
+            transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+        }
+        button {
+            background-color: #2563eb;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
+            width: 100%;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-top: 0.5rem;
+        }
+        button:hover {
+            background-color: #1d4ed8;
+            transform: translateY(-1px);
+        }
+        button:active {
+            background-color: #1e40af;
+            transform: translateY(0);
+        }
+        .output {
+            margin-top: 1rem;
+            padding: 1rem;
+            background-color: #eff6ff;
+            border-radius: 0.75rem;
+            border: 1px solid #bfdbfe;
+            color: #1e40af;
+            font-size: 0.95rem;
+        }
+        .output p {
+            margin: 0.5rem 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .output p strong {
+            color: #1f2937;
+        }
+        .output p span {
+            font-weight: 600;
+            color: #047857;
+        }
+        .title {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            color: #1f2937;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        .error-message {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background-color: #fee2e2; /* Light red */
+            border: 1px solid #ef4444; /* Red border */
+            color: #991b1b; /* Dark red text */
+            border-radius: 0.5rem;
+            text-align: center;
+            font-weight: 500;
+        }
+        /* Style for the checkbox/toggle group */
+        .toggle-group {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            background-color: #f9fafb;
+            border-radius: 0.5rem;
+            border: 1px solid #e5e7eb;
+        }
+        /* Styling for the Max Trade Size input section */
+        .max-trade-section {
+            display: none; /* Hidden until calculated */
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px dashed #d1d5db;
+        }
+    </style>
+</head>
+<body>
+
+<div class="main-container">
+    <h1 class="title" style="font-size: 2rem;">Multi-Ticker Order Sizing</h1>
+    <div id="app-container">
+        <!-- 8 calculator cards will be inserted here by JavaScript -->
+    </div>
+</div>
+
+<script>
+    const NUM_CARDS = 8;
+    const DEFAULT_TITLE_BASE = "Stock Trading Order Sizing";
+
+    /**
+     * Helper to round a number to the nearest 0.1 (used for fractional shares).
+     * @param {number} num - The number to round.
+     * @returns {number} The rounded number.
+     */
+    function roundToTenth(num) {
+        return Math.round(num * 10) / 10;
+    }
+
+    /**
+     * Reusable function to generate the HTML structure for a single calculator card.
+     * @param {number} id - The unique identifier for this card instance (1 to 8).
+     * @returns {string} The HTML string for the card.
+     */
+    function generateCardHTML(id) {
+        return `
+            <div class="card">
+                <h2 class="title" id="mainTitle${id}">${DEFAULT_TITLE_BASE}: Trade ${id}</h2>
+
+                <label for="tickerName${id}">Ticker name:</label>
+                <input type="text" id="tickerName${id}" placeholder="e.g., AAPL, TSLA" oninput="updateCardTitle(${id})"
+                       class="rounded-lg focus:ring-2 focus:ring-blue-500">
+
+                <div class="toggle-group">
+                    <label for="fractionalShares${id}" style="margin: 0; font-weight: 500;">Allow Fractional Shares (0.1 precision)</label>
+                    <input type="checkbox" id="fractionalShares${id}" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                </div>
+
+                <label for="dollarRisk${id}">Dollar amount to risk:</label>
+                <input type="number" id="dollarRisk${id}" placeholder="Enter amount to risk (e.g., 20)" step="1" 
+                       class="rounded-lg focus:ring-2 focus:ring-blue-500">
+
+                <label for="rewardRiskRatio${id}">Reward to risk ratio:</label>
+                <input type="number" id="rewardRiskRatio${id}" value="3" step="0.1" 
+                       class="rounded-lg focus:ring-2 focus:ring-blue-500">
+
+                <label for="stopEntryPriceInput${id}">Stop Entry price:</label>
+                <input type="number" id="stopEntryPriceInput${id}" placeholder="e.g., 10.50" step="0.01" 
+                       class="rounded-lg focus:ring-2 focus:ring-blue-500">
+
+                <label for="stopLossPriceInput${id}">Stop loss price:</label>
+                <input type="number" id="stopLossPriceInput${id}" placeholder="e.g., 10.00" step="0.01" 
+                       class="rounded-lg focus:ring-2 focus:ring-blue-500">
+
+                <button onclick="calculateOrderSize(${id})" class="rounded-lg">Calculate Order Size</button>
+
+                <div id="errorMessage${id}" class="error-message" style="display:none;"></div>
+
+                <div class="output">
+                    <p><strong>Quantity of shares:</strong> <span id="quantityShares${id}">0</span></p>
+                    <p><strong>Stop Entry price:</strong> <span id="outputStopEntryPrice${id}">$0.00</span></p>
+                    <p><strong>Stop loss price:</strong> <span id="outputStopLossPrice${id}">$0.00</span></p>
+                    <div style="border-top: 1px solid #d1d5db; margin: 0.5rem 0;"></div> <!-- Divider Line -->
+                    <p><strong>Trade size:</strong> <span id="tradeSize${id}">$0.00</span></p>
+                    <p><strong>Take profit price:</strong> <span id="takeProfitPrice${id}">$0.00</span></p>
+                </div>
+
+                <!-- NEW: Max Trade Size Section (Initially Hidden) -->
+                <div id="maxTradeSection${id}" class="max-trade-section">
+                    <label for="maxTradeSize${id}">Max Trade Size Cap:</label>
+                    <input type="number" id="maxTradeSize${id}" placeholder="Enter max dollar amount" step="1" 
+                           oninput="updateBasedOnMaxTrade(${id})" class="rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <div class="output mt-4" style="background-color: #f0fdf4; border-color: #bbf7d0;">
+                        <p><strong>New Quantity:</strong> <span id="newQuantityShares${id}">0</span></p>
+                        <p><strong>New Risk:</strong> <span id="newDollarRisk${id}">$0.00</span></p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Initializes the app by generating the required number of cards.
+     */
+    window.onload = function() {
+        const appContainer = document.getElementById('app-container');
+        let allCardsHTML = '';
+        for (let i = 1; i <= NUM_CARDS; i++) {
+            allCardsHTML += generateCardHTML(i);
+        }
+        appContainer.innerHTML = allCardsHTML;
+    };
+
+    /**
+     * Updates the H2 title of a specific card to reflect the entered ticker.
+     * @param {number} id - The unique card ID.
+     */
+    function updateCardTitle(id) {
+        const defaultTitle = `${DEFAULT_TITLE_BASE}: Trade ${id}`;
+        const ticker = document.getElementById(`tickerName${id}`).value.toUpperCase().trim();
+        const titleElement = document.getElementById(`mainTitle${id}`);
+        
+        if (ticker) {
+            titleElement.textContent = `${ticker} ${DEFAULT_TITLE_BASE}`;
+        } else {
+            titleElement.textContent = defaultTitle;
+        }
+    }
+
+    /**
+     * Displays a local error message within the specific card's bounds.
+     * @param {number} id - The unique card ID.
+     * @param {string} message - The message to display.
+     */
+    function showLocalError(id, message) {
+        const errorBox = document.getElementById(`errorMessage${id}`);
+        errorBox.textContent = message;
+        errorBox.style.display = 'block';
+    }
+
+    /**
+     * Hides the local error message for a specific card.
+     * @param {number} id - The unique card ID.
+     */
+    function hideLocalError(id) {
+        document.getElementById(`errorMessage${id}`).style.display = 'none';
+    }
+
+    /**
+     * Main calculation function based on risk amount.
+     * @param {number} id - The unique card ID.
+     * @param {boolean} [isRecalculate=false] - If true, skips input validation to allow recalculation logic.
+     */
+    function calculateOrderSize(id, isRecalculate = false) {
+        if (!isRecalculate) hideLocalError(id); // Only hide errors on initial button click
+
+        // Get inputs specific to this card instance
+        const dollarRisk = parseFloat(document.getElementById(`dollarRisk${id}`).value);
+        const rewardRiskRatio = parseFloat(document.getElementById(`rewardRiskRatio${id}`).value);
+        const stopEntryPrice = parseFloat(document.getElementById(`stopEntryPriceInput${id}`).value);
+        const stopLossPrice = parseFloat(document.getElementById(`stopLossPriceInput${id}`).value);
+        const fractionalSharesAllowed = document.getElementById(`fractionalShares${id}`).checked;
+
+        // Input validation (Skipped if recalculating from Max Trade Size)
+        if (!isRecalculate && (isNaN(dollarRisk) || isNaN(rewardRiskRatio) || isNaN(stopEntryPrice) || isNaN(stopLossPrice) || dollarRisk <= 0 || rewardRiskRatio <= 0 || stopEntryPrice <= 0 || stopLossPrice <= 0)) {
+            showLocalError(id, "Please enter valid positive numerical values for all fields.");
+            document.getElementById(`maxTradeSection${id}`).style.display = 'none';
+            return;
+        }
+        
+        // Reset outputs
+        document.getElementById(`quantityShares${id}`).textContent = 0;
+        document.getElementById(`outputStopEntryPrice${id}`).textContent = `$0.00`;
+        document.getElementById(`tradeSize${id}`).textContent = `$0.00`;
+        document.getElementById(`takeProfitPrice${id}`).textContent = `$0.00`;
+        document.getElementById(`outputStopLossPrice${id}`).textContent = `$0.00`;
+        
+        // Calculate Risk per Share
+        const riskPerShare = stopEntryPrice - stopLossPrice;
+        
+        let quantityShares;
+        
+        if (riskPerShare > 0) {
+            // 1. Calculate Quantity of Shares: Dollar amount to risk / Risk per share
+            quantityShares = dollarRisk / riskPerShare;
+            
+            if (fractionalSharesAllowed) {
+                // Round to the nearest 0.1 share
+                quantityShares = roundToTenth(quantityShares);
+            } else {
+                // Round down to the nearest whole share
+                quantityShares = Math.floor(quantityShares);
+            }
+            
+            // 2. Calculate Trade Size
+            const tradeSize = quantityShares * stopEntryPrice;
+
+            // 3. Calculate Take Profit Price
+            const potentialRewardPerShare = riskPerShare * rewardRiskRatio;
+            const takeProfitPrice = (stopEntryPrice + potentialRewardPerShare);
+
+            // Update Outputs
+            const sharePrecision = fractionalSharesAllowed ? 1 : 0;
+            document.getElementById(`quantityShares${id}`).textContent = quantityShares.toFixed(sharePrecision);
+            document.getElementById(`outputStopEntryPrice${id}`).textContent = `$${stopEntryPrice.toFixed(2)}`;
+            document.getElementById(`tradeSize${id}`).textContent = `$${tradeSize.toFixed(2)}`;
+            document.getElementById(`takeProfitPrice${id}`).textContent = `$${takeProfitPrice.toFixed(2)}`;
+            document.getElementById(`outputStopLossPrice${id}`).textContent = `$${stopLossPrice.toFixed(2)}`;
+
+            // Store results for trade size cap calculation
+            document.getElementById(`maxTradeSize${id}`).dataset.stopEntryPrice = stopEntryPrice;
+            document.getElementById(`maxTradeSize${id}`).dataset.stopLossPrice = stopLossPrice;
+            document.getElementById(`maxTradeSize${id}`).dataset.rewardRiskRatio = rewardRiskRatio;
+            document.getElementById(`maxTradeSize${id}`).dataset.riskPerShare = riskPerShare;
+            document.getElementById(`maxTradeSize${id}`).dataset.isFractional = fractionalSharesAllowed;
+            
+            // Show Max Trade Size section after the first successful calculation
+            document.getElementById(`maxTradeSection${id}`).style.display = 'block';
+
+        } else {
+            showLocalError(id, "Risk per share is zero or negative. Ensure Stop Entry Price > Stop Loss Price.");
+            document.getElementById(`maxTradeSection${id}`).style.display = 'none';
+        }
+    }
+
+    /**
+     * Recalculates shares and risk based on a Max Trade Size cap.
+     * @param {number} id - The unique card ID.
+     */
+    function updateBasedOnMaxTrade(id) {
+        const maxTradeSizeInput = document.getElementById(`maxTradeSize${id}`);
+        const maxTradeCap = parseFloat(maxTradeSizeInput.value);
+        
+        // Retrieve necessary data from stored dataset attributes
+        const stopEntryPrice = parseFloat(maxTradeSizeInput.dataset.stopEntryPrice);
+        const riskPerShare = parseFloat(maxTradeSizeInput.dataset.riskPerShare);
+        const fractionalSharesAllowed = maxTradeSizeInput.dataset.isFractional === 'true';
+        
+        // Input validation for the cap
+        if (isNaN(maxTradeCap) || maxTradeCap <= 0 || isNaN(stopEntryPrice) || stopEntryPrice <= 0 || isNaN(riskPerShare)) {
+            document.getElementById(`newQuantityShares${id}`).textContent = '0';
+            document.getElementById(`newDollarRisk${id}`).textContent = '$0.00';
+            return;
+        }
+
+        // 1. Calculate New Quantity based on Max Trade Cap
+        let newQuantity = maxTradeCap / stopEntryPrice;
+        
+        if (fractionalSharesAllowed) {
+            newQuantity = roundToTenth(newQuantity);
+        } else {
+            newQuantity = Math.floor(newQuantity);
+        }
+
+        // Prevent calculating a negative or zero quantity
+        if (newQuantity <= 0) {
+            document.getElementById(`newQuantityShares${id}`).textContent = '0';
+            document.getElementById(`newDollarRisk${id}`).textContent = '$0.00';
+            return;
+        }
+        
+        // 2. Calculate New Risk based on the New Quantity
+        const newRisk = newQuantity * riskPerShare;
+        
+        // Update New Outputs
+        const sharePrecision = fractionalSharesAllowed ? 1 : 0;
+        document.getElementById(`newQuantityShares${id}`).textContent = newQuantity.toFixed(sharePrecision);
+        document.getElementById(`newDollarRisk${id}`).textContent = `$${newRisk.toFixed(2)}`;
+    }
+</script>
+
+</body>
+</html>
